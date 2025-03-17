@@ -11,6 +11,7 @@ import re
 
 from dash import Dash, html, dcc, callback, Output, Input
 import plotly.express as px
+import plotly.graph_objects as go
 import pandas as pd
 
 df=pd.read_csv("stands.csv")
@@ -55,7 +56,7 @@ data = df.set_index('Stand')[cols].transpose()
 # external CSS stylesheets
 external_stylesheets = ['https://codepen.io/chriddyp/pen/bWLwgP.css']
 
-app = Dash(__name__,external_stylesheets=external_stylesheets)
+app = Dash(__name__,external_stylesheets=external_stylesheets,prevent_initial_callbacks='initial_duplicate')
 colors = [
     "#bcb88a",
     "#ffb961",
@@ -66,10 +67,13 @@ colors = [
 # df.groupby()
 
 dff = data.columns[0]
-fig = px.line_polar(data, r=dff, theta=cols, line_close=True,color_discrete_sequence=px.colors.sequential.Plasma_r,
-                    template="plotly_dark",)
-fig.update_traces(fill='toself')
-
+fig = go.Figure()
+fig.add_trace(go.Scatterpolar(r=data[dff], theta=cols, mode = 'lines',))
+fig.add_trace(go.Scatterpolar(r=data[dff], theta=cols, mode = 'lines',))
+stand1="Metallica"
+stand2="Geb"
+#fig.update_traces(fill='toself')
+#fig.plot()
 dsuns = dict(
     character=df["Stand"].tolist()+df["Part"].unique().tolist(),
     parent=df["Part"].tolist()+["" for i in range(df["Part"].unique().size)])
@@ -83,8 +87,9 @@ sunsb = px.sunburst(
     #color="color",
     color_continuous_scale=colors
 )
-bardf=df[df["Power"]>4]
-bars=px.bar(bardf, y="Stand", x=cols[0],orientation='h')
+df["meanP"]=(df["Power"]+df["Endurance"]+df["Potential"]+df["Precision"]+df["Radius"]+df["Speed"])/6
+bardf=df[df["Part"]==1]
+bars=px.bar(bardf, y="Stand", x="meanP",orientation='h')
 hist=px.histogram(df,x="Chapter")
 # адаптивность диаграмм - встраивание в окно
 style_dashboard={
@@ -100,16 +105,17 @@ app.layout = html.Div([
     html.H1(children='Jojo Stands', style={'textAlign':'center'}),
     html.Div([
     html.Div([
-      html.H2(children='Best stands by parametr', style={'textAlign':'center'}),
-      dcc.Dropdown(cols, cols[0], id='parameter',style={"height":"50px"}),
-      dcc.Dropdown(["Up","Down"], "Up", id='arrow',style={"height":"50px"}),
+      html.H2(children='Best stands by season', style={'textAlign':'center'}),
+      dcc.Dropdown(df.sort_values("Part")["Part"].unique(), 3, id='parameter',style={"height":"50px"}),
+      #dcc.Dropdown(["Up","Down"], "Up", id='arrow',style={"height":"50px"}),
       dcc.Graph(id='bar-chart',figure = bars, style={"height":'1000px'}),
     ],style={"height":'100%',
           "width":'100%',"border":"1px solid blue",
           "border-radius":"10px"}),
     html.Div([
         html.H2(children='Stand Map', style={'textAlign':'center'}),
-        dcc.Dropdown(df["Stand"].unique(), 'Metallica', id='dropdown-selection',style={"height":"50px"}),
+        dcc.Dropdown(df.sort_values("Stand")["Stand"].unique(), 'Metallica', id='dropdown-selection1',style={"height":"50px"}),
+        dcc.Dropdown(df.sort_values("Stand")["Stand"].unique(), 'Geb', id='dropdown-selection2',style={"height":"50px"}),
         html.Div(id = 'text-output', style={"height":"50px"}),
         dcc.Graph(id='graph-content', figure = fig, style=style_dashboard),
         dcc.Graph(id='sun-chart',figure = sunsb, style=style_dashboard)],style={"height":'100%',"width":'100%',"border":"1px solid blue","border-radius":"10px"})
@@ -131,27 +137,36 @@ app.layout = html.Div([
 @callback(
     Output('text-output', 'children'),
     Output('graph-content', 'figure'),
-    Input('dropdown-selection', 'value')
+    Input('dropdown-selection1', 'value'),
+    Input('dropdown-selection2', 'value')
 )
-def update_graph(value):
-    ind=df[df["Stand"]==value].index.tolist()[0]
-    dff=data.columns[ind]
-    fig = px.line_polar(data, r=dff, theta=cols, line_close=True)
-    fig.update_traces(fill='toself')
-    text="Stand User - "+df[df["Stand"]==value]["User"]
+def update_graph(value1,value2):
+    global stand1
+    global stand2
+    stand1=value1
+    stand2=value2
+    ind1=df[df["Stand"]==value1].index.tolist()[0]
+    dff1=data.columns[ind1]
+    ind2=df[df["Stand"]==value2].index.tolist()[0]
+    dff2=data.columns[ind2]
+    fig = go.Figure()
+    fig.add_trace(go.Scatterpolar(r=data[dff1], theta=cols,fill='toself', mode = 'lines',fillcolor="deepskyblue",opacity=0.5,name=stand1))
+    fig.add_trace(go.Scatterpolar(r=data[dff2], theta=cols,fill='toself', mode = 'lines',fillcolor="peru",opacity=0.5,name=stand2))
+    text="Stand User 1 - "+df[df["Stand"]==value1]["User"]+"\n"+"Stand User 2 - "+df[df["Stand"]==value2]["User"]
     return text,fig
 
 @callback(
     Output('bar-chart', 'figure'),
     Input('parameter', 'value'),
-    Input('arrow', 'value')
+    #Input('arrow', 'value')
 )
-def update_bar(vp,va):
-    if va=="Up":
-      bardf=df[df[vp]>4]
-    else:
-      bardf=df[df[vp]<2]
-    bars=px.bar(bardf, y="Stand", x=vp,orientation='h')
+def update_bar(value):
+    #if va=="Up":
+    #  bardf=df[df[vp]>4]
+    #else:
+    #  bardf=df[df[vp]<2]
+    bardf=df[df["Part"]==value]
+    bars=px.bar(bardf.sort_values("meanP"), y="Stand", x="meanP",orientation='h')
     return bars
 
 @callback(
